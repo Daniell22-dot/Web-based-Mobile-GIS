@@ -135,37 +135,86 @@ export default function RoutePanel({
 
     setIsCalculating(true);
 
-    // Simulate API delay
-    await new Promise((r) => setTimeout(r, 800));
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/routes/ors`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: [origin.lat, origin.lng],
+          destination: [destination.lat, destination.lng],
+        }),
+      });
 
-    const waypointCoords = points
-      .filter((p) => p.type === "waypoint")
-      .map((p) => [p.lat, p.lng] as [number, number]);
+      if (!response.ok) {
+        // Fallback to simulated route if ORS fails
+        throw new Error("ORS failed");
+      }
 
-    const mainRoute = generateSimulatedRoute(
-      [origin.lat, origin.lng],
-      [destination.lat, destination.lng],
-      waypointCoords
-    );
+      const data = await response.json();
 
-    // Generate alternative routes
-    const altRoute1: RouteData = {
-      ...generateSimulatedRoute(
-        [origin.lat + 0.005, origin.lng + 0.003],
-        [destination.lat, destination.lng]
-      ),
-      color: "#8b5cf6",
-    };
+      // ORS returns coordinates in [lng, lat] format
+      // Convert to [lat, lng] for internal storage, but display as [lng, lat] for Leaflet
+      const coords = data.coordinates || [];
 
-    const routes =
-      routeMode === "fastest"
-        ? [{ ...mainRoute, color: "#3b82f6" }, altRoute1]
-        : routeMode === "shortest"
-        ? [{ ...mainRoute, distance: mainRoute.distance * 0.9, color: "#10b981" }]
-        : [{ ...mainRoute, color: "#f59e0b" }];
+      // Build route data for MapComponent
+      const routeData: RouteData = {
+        coordinates: coords.map((c: [number, number]) => [c[1], c[0]] as [number, number]),  // [lat, lng]
+        distance: data.distance || 0,
+        duration: data.duration || 0,
+        color: data.color || "#3b82f4",
+      };
 
-    onRoutesChange(routes);
-    setRouteInfo({ distance: mainRoute.distance, duration: mainRoute.duration });
+      onRoutesChange([routeData]);
+      setRouteInfo({
+        distance: data.distance / 1000,  // Convert to km
+        duration: Math.round(data.duration / 60),  // Convert to minutes
+      });
+    } catch (error) {
+      // Fallback to simulated route if ORS API fails
+      console.warn("ORS routing failed, using simulated route:", error);
+
+      const originPt = points.find((p) => p.type === "origin");
+      const destPt = points.find((p) => p.type === "destination");
+
+      if (!originPt || !destPt) {
+        setIsCalculating(false);
+        return;
+      }
+
+      const waypointCoords = points
+        .filter((p) => p.type === "waypoint")
+        .map((p) => [p.lat, p.lng] as [number, number]);
+
+      const mainRoute = generateSimulatedRoute(
+        [originPt.lat, originPt.lng],
+        [destPt.lat, destPt.lng],
+        waypointCoords
+      );
+
+      const altRoute1: RouteData = {
+        ...generateSimulatedRoute(
+          [originPt.lat + 0.005, originPt.lng + 0.003],
+          [destPt.lat, destPt.lng]
+        ),
+        color: "#8b5cf6",
+      };
+
+      const routes =
+        routeMode === "fastest"
+          ? [{ ...mainRoute, color: "#3b82f6" }, altRoute1]
+          : routeMode === "shortest"
+          ? [{ ...mainRoute, distance: mainRoute.distance * 0.9, color: "#10b981" }]
+          : [{ ...mainRoute, color: "#f59e0b" }];
+
+      onRoutesChange(routes);
+      setRouteInfo({
+        distance: mainRoute.distance / 1000,
+        duration: Math.round(mainRoute.duration / 60),
+      });
+    }
+
     setIsCalculating(false);
   };
 
