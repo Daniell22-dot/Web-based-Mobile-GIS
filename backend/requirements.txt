@@ -2,5 +2,7 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 pydantic
+pydantic-settings
 python-dotenv
 httpx
+slowapi
