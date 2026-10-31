@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -8,7 +8,6 @@ app = FastAPI(
 )
 
 # CORS configuration
-# In production, restrict origins; in development, allow localhost
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -18,7 +17,34 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Security headers added via middleware
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Add security headers to every response."""
+    response = await call_next(request)
+
+    # Content Security Policy — tighten for production
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' http://localhost:8000 https://api.openrouteservice.org; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'self'"
+    )
+    response.headers["Content-Security-Policy"] = csp
+
+    # Recommended security headers (redundant with middleware but explicit)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    return response
 
 
 @app.get("/")

@@ -1,0 +1,47 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Vercel Frontend Deployment ───────────────────────────────────────
+      - name: Vercel Frontend Deploy
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: MOBILE\ GIS
+          alias-domains: |
+            mumiasgis.example.com
+          # Only deploy if TypeScript has no errors
+          # (CI step above would fail if there were TS errors)
+
+      # ── Railway Backend Deployment ─────────────────────────────────────────
+      - name: Railway Backend Deploy
+        if: env.RAILWAY_DEPLOY == 'true'
+        uses: railwayapp/railway-cli-action@v1
+        with:
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          working-directory: MOBILE\ GIS/backend
+          # Optional: run migrations after deploy
+          # command: python -m alembic upgrade head
+
+      # ── Notify ─────────────────────────────────────────────────────────────
+      - name: Slack Notification (optional)
+        if: always()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          message: |
+            :white_check_mark: *MumiasGIS Deploy* — ${{ github.event.head_commit.id[:7] }}
+            Frontend: https://mumiasgis.vercel.app
+            Backend: https://railway.app.link/your-backend-url

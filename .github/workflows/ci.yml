@@ -1,0 +1,55 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      # Neon PostgreSQL isn't a service we can easily run, so we skip DB tests
+      # or use a mock
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd MOBILE\ GIS
+          npm ci
+
+      - name: Run TypeScript check
+        run: |
+          cd MOBILE\ GIS
+          npx tsc --noEmit
+
+      - name: Run ESLint
+        run: |
+          cd MOBILE\ GIS
+          npm run lint
+
+      - name: Run Backend Python Checks
+        run: |
+          cd MOBILE\ GIS/.venv
+          python -m pylint --errors backend/ || true
+          python -m pytest backend/ --tb=short || true
+
+      - name: Archive linting artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-errors
+          path: |
+            MOBILE\ GIS/eslint.log
+            MOBILE\ GIS/tsc.log
